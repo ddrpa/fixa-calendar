@@ -33,9 +33,7 @@ public class HolidayTests {
 
     @Test
     void nextDayOffTest() {
-        NEXT_DAYOFF_TESTCASE.forEach(testCase -> {
-            assertEquals(testCase.getRight(), calendar.nextDayOff(testCase.getLeft()));
-        });
+        NEXT_DAYOFF_TESTCASE.forEach(testCase -> assertEquals(testCase.getRight(), calendar.nextDayOff(testCase.getLeft())));
     }
 
     private static final List<ImmutableTriple<LocalDate, LocalDate, Integer>> DAYOFF_TESTCASE = List.of(

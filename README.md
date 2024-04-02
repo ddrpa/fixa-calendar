@@ -31,7 +31,17 @@ FixaCalendar 主要用于计算非工作日（DayOff）和工作日（Workday）
 
 ## 使用方法
 
-需要 Java 17 或更高版本，因为作者使用了一些新 JDK 的语法糖，但是降级到 Java 8 也很容易。
+你可以通过 Maven 中央仓库获取 FixaCalendar，最新版本可通过 [Sonatype Maven Central Repository](https://central.sonatype.com/artifact/cc.ddrpa.fixa/fixa) 查询，目前发布的版本为 `0.0.1`。
+
+```xml
+<dependency>
+    <groupId>cc.ddrpa.fixa</groupId>
+    <artifactId>fixa</artifactId>
+    <version>0.0.1</version>
+</dependency>
+```
+
+因为作者使用了一些来自新 JDK 的好东西，所以需要 Java 17 或更高版本，但是降级到 Java 8 也应该很容易。
 
 构造一个 FixaCalendar 实例，从2024年3月9日开始初始化一年的周六周日作为周末，添加 2024年的清明节假期调休与工作日：
 
