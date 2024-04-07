@@ -85,3 +85,7 @@ List<LocalDate> dayOffs = calendar.dayOffs(startDate, endDate);
 ```java
 LocalDate nextDayOff = calendar.nextDayOff(startDate);
 ```
+
+## 如何更新节假日数据
+
+对一个节假日日历来说，最重要的是初始化数据从哪里来。幸运的是互联网上有许多这样的节假日数据，例如爬取了假日办公告的 [NateScarlet/holiday-cn - GitHub](https://github.com/NateScarlet/holiday-cn")  项目，你可以参考 `cc.ddrpa.fixa.AutoUpdateTests#NateScarletAutoUpdateTest()` 用一个定时任务实现自己的定期更新机制。
