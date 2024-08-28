@@ -7,11 +7,11 @@
 那么，为什么不直接用一个列表存储节假日，然后遍历计算节假日数量呢？
 
 作者没有也没打算做性能分析，
-因为不管性能是更好了还是更坏了，在大多数使用场景下这点都不够看的。内存消耗也不是什么大的问题，假日办每年只会发布明年的假期安排，原本就不需要把多少数据放在内存里。
+因为不管性能是更好了还是更坏了，在大多数使用场景下这点都不够看的。内存消耗也不是什么大的问题，假日办只会在每年 11 月 25 日左右发布明年的假期安排，对于一般应用，原本就不需要把多少数据放在内存里。
 
 作者只是演示下 Bitmap 能拿来这么用而已，你要抠性能可以换成有序数组。
 
-Fixa 是作者用 JetBrains IDEA 随机项目生成器插件使用瑞典家具风格随机生成的。
+Fixa 是作者用 JetBrains IDEA 随机项目生成器插件使用瑞典家具风格随机生成的项目名字。
 
 ## 定义
 
@@ -37,13 +37,13 @@ FixaCalendar 主要用于计算非工作日（DayOff）和工作日（Workday）
 <dependency>
     <groupId>cc.ddrpa.fixa</groupId>
     <artifactId>fixa</artifactId>
-    <version>0.0.1</version>
+    <version>1.0.0</version>
 </dependency>
 ```
 
-因为作者使用了一些来自新 JDK 的好东西，所以需要 Java 17 或更高版本，但是降级到 Java 8 也应该很容易。
+你需要使用 JDK11+ 来运行 Fixa，JDK8 的支持不在考虑范围内。如果你仍在使用 JDK8，应该至少试试看 JDK11。
 
-构造一个 FixaCalendar 实例，从2024年3月9日开始初始化一年的周六周日作为周末，添加 2024年的清明节假期调休与工作日：
+构造一个 FixaCalendar 实例，从2024年3月9日开始初始化一年的周六周日作为周末，手动添加 2024年的清明节假期调休与工作日：
 
 ```java
 FixaCalendar calendar = new FixaCalendar(
@@ -88,4 +88,17 @@ LocalDate nextDayOff = calendar.nextDayOff(startDate);
 
 ## 如何更新节假日数据
 
-对一个节假日日历来说，最重要的是初始化数据从哪里来。幸运的是互联网上有许多这样的节假日数据，例如爬取了假日办公告的 [NateScarlet/holiday-cn - GitHub](https://github.com/NateScarlet/holiday-cn")  项目，你可以参考 `cc.ddrpa.fixa.AutoUpdateTests#NateScarletAutoUpdateTest()` 用一个定时任务实现自己的定期更新机制。
+对一个节假日日历来说，最重要的是初始化数据从哪里来。互联网上有许多这样的节假日数据，本项目在单元测试中展示了两种通过互联网更新节假日信息的方案，你可以设置定时任务，在每年的 11月底 / 12月初更新来年的节假日信息。
+
+### 通过 iCalendar 订阅更新
+
+iCalendar（通常使用 `.ics` 扩展名）是一种基于文本的日历信息交换和管理格式。该规范最初由 IETF 制定，标准化为 RFC 5545。它广泛用于各种应用程序和服务，如 Google Calendar、Microsoft Outlook、Apple Calendar。
+
+`cc.ddrpa.fixa.ICSAutoUpdateTests` 展示了使用 Apple Calendar 的中国大陆节假日日历订阅地址获取 iCalendar 格式数据（并解析），用来初始化节假日信息。如果你需要使用其他订阅源，`biweekly.component.VEvent` 的解读可能会略有不同。
+
+### NateScarlet/holiday-cn - GitHub
+
+代码见 `cc.ddrpa.fixa.NateScarletAutoUpdateTests`。
+
+[NateScarlet/holiday-cn - GitHub](https://github.com/NateScarlet/holiday-cn") 使用网页爬虫抓取假日办的网站页面，并将解析出的节假日信息以 JSON 格式发布在 GitHub Repository 上，可以通过 JSDelivr CDN 获取按年份分割的 JSON 数据。
+

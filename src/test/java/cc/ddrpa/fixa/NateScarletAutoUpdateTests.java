@@ -1,9 +1,11 @@
 package cc.ddrpa.fixa;
 
+import static java.time.temporal.ChronoUnit.SECONDS;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import org.junit.jupiter.api.Test;
-
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -14,17 +16,14 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
-
-import static java.time.temporal.ChronoUnit.SECONDS;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
 
 /**
  * You can use @Scheduled annotation in Spring Boot project to schedule tasks.
  * <p>
  * Use @Scheduled(cron = "0 0 0 25 12 ?") to update holiday data every Christmas Day at midnight.
  */
-public class AutoUpdateTests {
+class NateScarletAutoUpdateTests {
     private static final FixaCalendar calendar = new FixaCalendar(FixaWeekendEnum.SATURDAY_AND_SUNDAY, LocalDate.of(2023, 12, 25), Duration.ofDays(400));
 
     private static final List<LocalDate> DATA_HOLIDAYS = List.of(
@@ -45,9 +44,9 @@ public class AutoUpdateTests {
      * See <a href="https://github.com/NateScarlet/holiday-cn">NateScarlet/holiday-cn - GitHub</a> for more information.
      */
     @Test
-    void NateScarletAutoUpdateTest() throws URISyntaxException, IOException, InterruptedException {
+    void autoUpdateTest() throws URISyntaxException, IOException, InterruptedException {
         var request = HttpRequest.newBuilder()
-                .uri(new URI(String.format("https://cdn.jsdelivr.net/gh/NateScarlet/holiday-cn@master/%s.json", 2024)))
+                .uri(new URI(String.format("https://fastly.jsdelivr.net/gh/NateScarlet/holiday-cn@master/%s.json", 2024)))
                 .GET()
                 .timeout(Duration.of(3, SECONDS))
                 .build();
