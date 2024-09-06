@@ -38,6 +38,7 @@ import org.slf4j.LoggerFactory;
 class ICSAutoUpdateTests {
 
     private static final Logger logger = LoggerFactory.getLogger(ICSAutoUpdateTests.class);
+    private static final int SECONDS_IN_DAY = 24 * 60 * 60;
 
     private static final FixaCalendar calendar = new FixaCalendar(
         FixaWeekendEnum.SATURDAY_AND_SUNDAY, LocalDate.of(2023, 12, 25), Duration.ofDays(400));
@@ -48,12 +49,16 @@ class ICSAutoUpdateTests {
         LocalDate.of(2024, 2, 11),
         LocalDate.of(2024, 2, 12),
         LocalDate.of(2024, 2, 13),
+        LocalDate.of(2024, 9, 15),
+        LocalDate.of(2024, 9, 16),
+        LocalDate.of(2024, 9, 17),
         LocalDate.of(2024, 10, 3));
 
     private static final List<LocalDate> DATA_FLEXIBLE_WORKDAYS = List.of(
         LocalDate.of(2024, 2, 4),
         LocalDate.of(2024, 2, 18),
         LocalDate.of(2024, 4, 7),
+        LocalDate.of(2024, 9, 14),
         LocalDate.of(2024, 10, 12));
 
     @Test
@@ -68,26 +73,27 @@ class ICSAutoUpdateTests {
         parseAppleCalendar(2024);
 
         for (var holiday : DATA_HOLIDAYS) {
-            assertTrue(calendar.isHoliday(holiday));
-            assertTrue(calendar.isDayOff(holiday));
+            assertTrue(calendar.isHoliday(holiday), holiday + " is not a holiday");
+            assertTrue(calendar.isDayOff(holiday), holiday + " is not a day off");
         }
         for (var workday : DATA_FLEXIBLE_WORKDAYS) {
-            assertTrue(calendar.isFlexibleWorkday(workday));
-            assertFalse(calendar.isDayOff(workday));
+            assertTrue(calendar.isFlexibleWorkday(workday), workday + " is not a flexible workday");
+            assertFalse(calendar.isDayOff(workday), workday + " is a day off");
         }
     }
 
     private void parseAppleCalendar(int year) throws IOException {
         // 计算本年度的 EpochSecond 上下限
-        long startEpochMilli = LocalDate.ofYearDay(year, 1)
+        // 开始时间是指定年份的 1 月 1 日 0 时 0 分 0 秒
+        long startEpoch = LocalDate.ofYearDay(year, 1)
             .atStartOfDay(ZoneOffset.ofHours(8))
             .toInstant()
-            .toEpochMilli();
-        long endEpochMilli = LocalDate.ofYearDay(year + 1, 1)
+            .toEpochMilli() / 1000L;
+        // 结束时间是指定年份的 12 月 31 日 23 时 59 分 59 秒
+        long endEpoch = LocalDate.ofYearDay(year + 1, 1)
             .atStartOfDay(ZoneOffset.ofHours(8))
-            .minusSeconds(1)
             .toInstant()
-            .toEpochMilli();
+            .toEpochMilli() / 1000L - 1L;
         try (FileInputStream fis = new FileInputStream(year + ".ics")) {
             List<VEvent> eventList = Biweekly.parse(fis).first().getComponents(VEvent.class);
             for (VEvent event : eventList) {
@@ -107,12 +113,14 @@ class ICSAutoUpdateTests {
                 }
                 if (Objects.isNull(event.getDateEnd())) {
                     // 一天的日历事件，没有 dateEnd
-                    long timeStart = event.getDateStart().getValue().getTime();
-                    if (timeStart < startEpochMilli || timeStart > endEpochMilli) {
+                    // 转换为秒数时间戳，实际上是某一天的 0 时 0 分 0 秒
+                    long timeStart = event.getDateStart().getValue().getTime() / 1000L;
+                    if (timeStart < startEpoch || timeStart > endEpoch) {
                         // 不在指定年度内，跳过
                         continue;
                     }
-                    LocalDate dataStart = LocalDateTime.ofEpochSecond(timeStart / 1000, 0, ZoneOffset.ofHours(8))
+                    LocalDate dataStart = LocalDateTime.ofEpochSecond(timeStart, 0,
+                            ZoneOffset.ofHours(8))
                         .toLocalDate();
                     if (isHoliday) {
                         calendar.addHoliday(dataStart);
@@ -122,25 +130,27 @@ class ICSAutoUpdateTests {
                     logger.info("dataStart: {}", dataStart);
                 } else {
                     // 持续多日的日历事件，会有 dateEnd
+                    // 在 ICS 格式中，dataEnd 是一个开区间，不包含本日
+                    // 将其转换为闭区间，获取前一天的 0 时 0 分 0 秒
+                    long timeEnd = event.getDateEnd().getValue().getTime() / 1000L - SECONDS_IN_DAY;
                     // 确保 dataEnd 在本年度内或之后
-                    long timeEnd = event.getDateEnd().getValue().getTime();
-                    if (timeEnd < startEpochMilli) {
+                    if (timeEnd < startEpoch) {
                         continue;
-                    } else if (timeEnd > endEpochMilli) {
+                    } else if (timeEnd > endEpoch) {
                         // 把事件日期收束到本年度内
-                        timeEnd = endEpochMilli;
+                        timeEnd = endEpoch;
                     }
                     // 确保 dataStart 在本年度内或之前
-                    long timeStart = event.getDateStart().getValue().getTime();
-                    if (timeStart > endEpochMilli) {
+                    long timeStart = event.getDateStart().getValue().getTime() / 1000L;
+                    if (timeStart > endEpoch) {
                         continue;
-                    } else if (timeStart < startEpochMilli) {
+                    } else if (timeStart < startEpoch) {
                         // 把事件日期收束到本年度内
-                        timeStart = startEpochMilli;
+                        timeStart = startEpoch;
                     }
-                    LocalDate dataStart = LocalDateTime.ofEpochSecond(timeStart / 1000, 0,
+                    LocalDate dataStart = LocalDateTime.ofEpochSecond(timeStart, 0,
                         ZoneOffset.ofHours(8)).toLocalDate();
-                    LocalDate dataEnd = LocalDateTime.ofEpochSecond(timeEnd / 1000, 0,
+                    LocalDate dataEnd = LocalDateTime.ofEpochSecond(timeEnd, 0,
                         ZoneOffset.ofHours(8)).toLocalDate();
                     if (isHoliday) {
                         calendar.addHolidays(dataStart, dataEnd);
