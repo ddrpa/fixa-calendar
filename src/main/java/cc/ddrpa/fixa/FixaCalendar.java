@@ -1,5 +1,7 @@
 package cc.ddrpa.fixa;
 
+import cc.ddrpa.fixa.loader.IFixaDateLoader;
+import cc.ddrpa.fixa.loader.NopeDateLoader;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -24,6 +26,7 @@ public class FixaCalendar {
     // 非工作日计算方法
     // day-off = weekend + holiday - flexibleWorkday
     private final RoaringBitmap dayOffMap = RoaringBitmap.bitmapOf();
+    private final IFixaDateLoader dateLoader;
 
     /**
      * Construct a new FixaCalendar with default settings
@@ -40,7 +43,9 @@ public class FixaCalendar {
      *     <li>计算接下来 5 年的周末</li>
      * </ul>
      */
+    @Deprecated
     public FixaCalendar() {
+        this.dateLoader = new NopeDateLoader();
         new FixaCalendar(FixaWeekendEnum.SATURDAY_AND_SUNDAY, LocalDate.now(),
             Duration.ofDays(365 * 5));
     }
@@ -54,6 +59,7 @@ public class FixaCalendar {
      * @param setWeekendAfter use this date as the starting date for weekend calculation
      * @param duration        calculate the weekends for the next duration days
      */
+    @Deprecated
     public FixaCalendar(FixaWeekendEnum weekend, LocalDate setWeekendAfter, Duration duration) {
         if (duration.isNegative()) {
             throw new IllegalArgumentException("Negative duration is not supported right now.");
@@ -76,8 +82,16 @@ public class FixaCalendar {
         } else {
             throw new IllegalArgumentException("Invalid weekend type.");
         }
-        weekendMap.add(weekendPos);
-        dayOffMap.add(weekendPos);
+        this.weekendMap.add(weekendPos);
+        this.dayOffMap.add(weekendPos);
+        this.dateLoader = new NopeDateLoader();
+    }
+
+    protected FixaCalendar(int[] weekendPos, IFixaDateLoader dateLoader) {
+        this.weekendMap.add(weekendPos);
+        this.dayOffMap.add(weekendPos);
+        this.dateLoader = dateLoader;
+        this.dateLoader.load(this);
     }
 
     /**
@@ -387,6 +401,16 @@ public class FixaCalendar {
             .toArray();
         flexibleWorkdayMap.add(bits);
         dayOffMap.andNot(flexibleWorkdayMap);
+    }
+
+    /**
+     * 使用指定的 {@link IFixaDateLoader} 更新日历信息
+     *
+     * @param year
+     * @return
+     */
+    public boolean update(int year) {
+        return this.dateLoader.update(year, this);
     }
 
     /**

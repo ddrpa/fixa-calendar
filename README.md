@@ -31,25 +31,29 @@ FixaCalendar 主要用于计算非工作日（DayOff）和工作日（Workday）
 
 ## 使用方法
 
-你可以通过 Maven 中央仓库获取 FixaCalendar，最新版本可通过 [Sonatype Maven Central Repository](https://central.sonatype.com/artifact/cc.ddrpa.fixa/fixa) 查询，目前发布的版本为 `0.0.1`。
+你可以通过 Maven 中央仓库获取 FixaCalendar，最新版本可通过 [Sonatype Maven Central Repository](https://central.sonatype.com/artifact/cc.ddrpa.fixa/fixa) 查询，目前发布的版本为 `1.0.1`。
 
 ```xml
 <dependency>
     <groupId>cc.ddrpa.fixa</groupId>
     <artifactId>fixa</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
 </dependency>
 ```
 
 你需要使用 JDK11+ 来运行 Fixa，JDK8 的支持不在考虑范围内。如果你仍在使用 JDK8，应该至少试试看 JDK11。
 
-构造一个 FixaCalendar 实例，从2024年3月9日开始初始化一年的周六周日作为周末，手动添加 2024年的清明节假期调休与工作日：
+使用 FixaCalendarBuilder 构造一个 FixaCalendar 实例，并设置 Apple 日历为更新数据源，其他参数保持默认：
 
 ```java
-FixaCalendar calendar = new FixaCalendar(
-        FixaWeekendEnum.SATURDAY_AND_SUNDAY,
-        LocalDate.of(2024, 3, 9),
-        Duration.ofDays(365));
+FixaCalendar calendar = new FixaCalendarBuilder()
+    .registerDateLoader(new AppleCalendarDateLoader())
+    .build();
+```
+
+手动添加一些额外的日期和工作日：
+
+```java
 calendar.addHolidays(List.of(
         LocalDate.of(2024, 4, 4),
         LocalDate.of(2024, 4, 5),
@@ -88,13 +92,13 @@ LocalDate nextDayOff = calendar.nextDayOff(startDate);
 
 ## 如何更新节假日数据
 
-对一个节假日日历来说，最重要的是初始化数据从哪里来。互联网上有许多这样的节假日数据，本项目在单元测试中展示了两种通过互联网更新节假日信息的方案，你可以设置定时任务，在每年的 11月底 / 12月初更新来年的节假日信息。
+如果你注册了一个有效的 `DateLoader`，那么你可以通过调用 `cc.ddrpa.fixa.FixaCalendar.update(year)` 方法来更新指定年份的节假日数据。
+
+互联网上有许多这样的节假日数据源，本项目集成了通过 iCalendar 订阅更新节假日信息的 `cc.ddrpa.fixa.loader.AppleCalendarDateLoader`；在单元测试 `cc.ddrpa.fixa.NateScarletAutoUpdateTests` 中也展示了基于 [NateScarlet/holiday-cn - GitHub](https://github.com/NateScarlet/holiday-cn") 的方案。你也可以编写自己的 `cc.ddrpa.fixa.loader.IFixaDateLoader` 实现。
 
 ### 通过 iCalendar 订阅更新
 
 iCalendar（通常使用 `.ics` 扩展名）是一种基于文本的日历信息交换和管理格式。该规范最初由 IETF 制定，标准化为 RFC 5545。它广泛用于各种应用程序和服务，如 Google Calendar、Microsoft Outlook、Apple Calendar。
-
-`cc.ddrpa.fixa.ICSAutoUpdateTests` 展示了使用 Apple Calendar 的中国大陆节假日日历订阅地址获取 iCalendar 格式数据（并解析），用来初始化节假日信息。如果你需要使用其他订阅源，`biweekly.component.VEvent` 的解读可能会略有不同。
 
 ### NateScarlet/holiday-cn - GitHub
 

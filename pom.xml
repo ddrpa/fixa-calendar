@@ -4,7 +4,7 @@
 
     <groupId>cc.ddrpa.fixa</groupId>
     <artifactId>fixa</artifactId>
-    <version>1.0.1-SNAPSHOT</version>
+    <version>1.0.1</version>
     <packaging>jar</packaging>
 
     <name>${project.groupId}:${project.artifactId}</name>
@@ -52,6 +52,7 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <roaringbitmap.version>1.2.1</roaringbitmap.version>
+        <biweekly.version>0.6.8</biweekly.version>
         <slf4j.version>2.0.13</slf4j.version>
         <junit.version>5.10.3</junit.version>
     </properties>
@@ -65,8 +66,7 @@
         <dependency>
             <groupId>net.sf.biweekly</groupId>
             <artifactId>biweekly</artifactId>
-            <version>0.6.8</version>
-            <scope>test</scope>
+            <version>${biweekly.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
