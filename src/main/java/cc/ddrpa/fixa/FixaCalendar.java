@@ -2,6 +2,9 @@ package cc.ddrpa.fixa;
 
 import cc.ddrpa.fixa.loader.IFixaDateLoader;
 import cc.ddrpa.fixa.loader.NopeDateLoader;
+import org.roaringbitmap.IntConsumer;
+import org.roaringbitmap.RoaringBitmap;
+
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -9,8 +12,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.StreamSupport;
-import org.roaringbitmap.IntConsumer;
-import org.roaringbitmap.RoaringBitmap;
 
 /**
  * FixaCalendar was mainly used to calculate workdays and holidays.
@@ -47,7 +48,7 @@ public class FixaCalendar {
     public FixaCalendar() {
         this.dateLoader = new NopeDateLoader();
         new FixaCalendar(FixaWeekendEnum.SATURDAY_AND_SUNDAY, LocalDate.now(),
-            Duration.ofDays(365 * 5));
+                Duration.ofDays(365 * 5));
     }
 
     /**
@@ -71,14 +72,14 @@ public class FixaCalendar {
         if (weekend.isSingleDayWeekend()) {
             startPos = startPos - dayOfWeek - 4 + weekend.getCode();
             weekendPos = IntStream.iterate(startPos, i -> i + 7)
-                .limit(durationInDays / 7)
-                .toArray();
+                    .limit(durationInDays / 7)
+                    .toArray();
         } else if (weekend.isDoubleDayWeekend()) {
             startPos = startPos - dayOfWeek - 2 + weekend.getCode();
             weekendPos = IntStream.iterate(startPos, i -> i + 7)
-                .limit(durationInDays / 7)
-                .flatMap(i -> IntStream.of(i, i + 1))
-                .toArray();
+                    .limit(durationInDays / 7)
+                    .flatMap(i -> IntStream.of(i, i + 1))
+                    .toArray();
         } else {
             throw new IllegalArgumentException("Invalid weekend type.");
         }
@@ -229,6 +230,39 @@ public class FixaCalendar {
     }
 
     /**
+     * Returns the date that is the indicated number of working days before the end date
+     * <p>
+     * 返回给定日期之前的第 n 个工作日
+     *
+     * @param endDate              end date(included if it is a workday)
+     * @param duration             represent the number of non-weekend and non-holiday days before end_date.
+     * @param endDateMustBeWorkday if true, the end date must be a workday, otherwise it should be pushed to the last workday
+     * @return
+     */
+    public LocalDate reverseWorkday(LocalDate endDate, Duration duration, boolean endDateMustBeWorkday) {
+        long length = duration.toDays();
+        long endPos = endDate.toEpochDay();
+        long possibleStartPos = endPos - length;
+        long cardinality;
+        if (endDateMustBeWorkday) {
+            // RoaringBitmap::rangeCardinality calculate cardinality between [start, end)
+            // 首轮计算需要考虑 endDate 是否为工作日, return [start, end]
+            cardinality = dayOffMap.rangeCardinality(possibleStartPos, endPos + 1);
+        } else {
+            // return [start, end)
+            cardinality = dayOffMap.rangeCardinality(possibleStartPos, endPos);
+        }
+        while (cardinality != 0) {
+            // if there are values between (start, end], move the endPos to the start of the range
+            endPos = possibleStartPos;
+            possibleStartPos -= cardinality;
+            // re-calculate the cardinality between [new-start, new-end)
+            cardinality = dayOffMap.rangeCardinality(possibleStartPos, endPos);
+        }
+        return LocalDate.ofEpochDay(possibleStartPos);
+    }
+
+    /**
      * Return list of holidays between startDate and given duration
      * <p>
      * 给定起始日期和一个持续时间，返回在这段时间内的非工作日列表
@@ -248,8 +282,8 @@ public class FixaCalendar {
         // get [start, end] by using [start, end + 1)
         dayOffMap.forEachInRange(startPos, length + 1, new FixaDateConsumer(bits));
         return bits.stream()
-            .map(LocalDate::ofEpochDay)
-            .collect(Collectors.toList());
+                .map(LocalDate::ofEpochDay)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -270,8 +304,8 @@ public class FixaCalendar {
         List<Integer> bits = new ArrayList<>(length);
         dayOffMap.forEachInRange(startPos, length, new FixaDateConsumer(bits));
         return bits.stream()
-            .map(LocalDate::ofEpochDay)
-            .collect(Collectors.toList());
+                .map(LocalDate::ofEpochDay)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -284,7 +318,7 @@ public class FixaCalendar {
      */
     public LocalDate nextDayOff(LocalDate startDate) {
         return LocalDate.ofEpochDay(
-            dayOffMap.nextValue(Math.toIntExact(startDate.toEpochDay()) + 1));
+                dayOffMap.nextValue(Math.toIntExact(startDate.toEpochDay()) + 1));
     }
 
     /**
@@ -299,8 +333,8 @@ public class FixaCalendar {
     public void addRecurringHolidays(LocalDate startDate, int interval, int loop) {
         int startPos = Math.toIntExact(startDate.toEpochDay());
         int[] bits = IntStream.range(0, loop)
-            .map(i -> startPos + i * interval)
-            .toArray();
+                .map(i -> startPos + i * interval)
+                .toArray();
         holidayMap.add(bits);
         dayOffMap.add(bits);
     }
@@ -328,9 +362,9 @@ public class FixaCalendar {
      */
     public void addHolidays(LocalDate firstDay, LocalDate lastDay) {
         int[] bits = IntStream.rangeClosed(
-                Math.toIntExact(firstDay.toEpochDay()),
-                Math.toIntExact(lastDay.toEpochDay()))
-            .toArray();
+                        Math.toIntExact(firstDay.toEpochDay()),
+                        Math.toIntExact(lastDay.toEpochDay()))
+                .toArray();
         holidayMap.add(bits);
         dayOffMap.add(bits);
     }
@@ -344,10 +378,10 @@ public class FixaCalendar {
      */
     public void addHolidays(Iterable<LocalDate> dates) {
         int[] bits = StreamSupport.stream(dates.spliterator(), false)
-            .map(LocalDate::toEpochDay)
-            .mapToInt(Math::toIntExact)
-            .sorted()
-            .toArray();
+                .map(LocalDate::toEpochDay)
+                .mapToInt(Math::toIntExact)
+                .sorted()
+                .toArray();
         holidayMap.add(bits);
         dayOffMap.add(bits);
     }
@@ -379,9 +413,9 @@ public class FixaCalendar {
      */
     public void addFlexibleWorkdays(LocalDate firstDay, LocalDate lastDay) {
         int[] bits = IntStream.rangeClosed(
-                Math.toIntExact(firstDay.toEpochDay()),
-                Math.toIntExact(lastDay.toEpochDay()))
-            .toArray();
+                        Math.toIntExact(firstDay.toEpochDay()),
+                        Math.toIntExact(lastDay.toEpochDay()))
+                .toArray();
         flexibleWorkdayMap.add(bits);
         dayOffMap.andNot(flexibleWorkdayMap);
     }
@@ -395,10 +429,10 @@ public class FixaCalendar {
      */
     public void addFlexibleWorkdays(Iterable<LocalDate> dates) {
         int[] bits = StreamSupport.stream(dates.spliterator(), false)
-            .map(LocalDate::toEpochDay)
-            .mapToInt(Math::toIntExact)
-            .sorted()
-            .toArray();
+                .map(LocalDate::toEpochDay)
+                .mapToInt(Math::toIntExact)
+                .sorted()
+                .toArray();
         flexibleWorkdayMap.add(bits);
         dayOffMap.andNot(flexibleWorkdayMap);
     }

@@ -78,6 +78,16 @@ int workdays = calendar.netWorkdays(start, end);
 LocalDate date = calendar.workday(startDate, duration);
 ```
 
+### 计算指定日期前 N 个工作日的日期（1.0.2-SNAPSHOT）
+
+常用于需要在指定截止期限前 N 日创建提醒任务的场景。
+
+```java
+LocalDate reverseWorkday(LocalDate endDate, Duration duration, boolean endDateMustBeWorkday);
+```
+
+`endDateMustBeWorkday` 为 true 时，如果 `endDate` 不是工作日，则会向前推移到最近的工作日再开始计算。
+
 ### 列出指定日期区间内的所有非工作日
 
 ```java
