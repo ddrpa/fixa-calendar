@@ -8,39 +8,15 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 
-import static cc.ddrpa.fixa.TestCases.*;
+import static cc.ddrpa.fixa.TestCases.DATA_FLEXIBLE_WORKDAYS;
+import static cc.ddrpa.fixa.TestCases.DATA_HOLIDAYS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Test cases for FixaCalendar workdays calculation.
  */
 public class WorkdayTests {
-    private static final FixaCalendar calendar = new FixaCalendar(FixaWeekendEnum.SATURDAY_AND_SUNDAY,LocalDate.of(2024, 3, 9),  Duration.ofDays(365));
-
-    @BeforeAll
-    static void setup() {
-        calendar.addHolidays(DATA_HOLIDAYS);
-        calendar.addFlexibleWorkdays(DATA_FLEXIBLE_WORKDAYS);
-    }
-
-    @Test
-    void netWorkdaysTest() {
-        NETWORKDAY_TESTCASE.forEach(testCase -> {
-            var start = testCase.getLeft();
-            var end = testCase.getMiddle();
-            assertEquals(testCase.getRight(), calendar.netWorkdays(start, end));
-        });
-    }
-
-    @Test
-    void workdayTest() {
-        WORKDAY_TESTCASE.forEach(testCase -> {
-            var start = testCase.getLeft();
-            var duration = Duration.ofDays(testCase.getMiddle());
-            assertEquals(testCase.getRight(), calendar.workday(start, duration));
-        });
-    }
-
+    private static final FixaCalendar calendar = new FixaCalendar(FixaWeekendEnum.SATURDAY_AND_SUNDAY, LocalDate.of(2024, 3, 9), Duration.ofDays(365));
     private static final List<ImmutableTriple<LocalDate, LocalDate, Integer>> NETWORKDAY_TESTCASE = List.of(
             // 工作日开始，非工作日结束
             ImmutableTriple.of(LocalDate.of(2024, 3, 22), LocalDate.of(2024, 3, 23), 1),
@@ -70,7 +46,6 @@ public class WorkdayTests {
             ImmutableTriple.of(LocalDate.of(2024, 3, 30), LocalDate.of(2024, 4, 19), 17),
             ImmutableTriple.of(LocalDate.of(2024, 4, 19), LocalDate.of(2024, 5, 4), 7)
     );
-
     private static final List<ImmutableTriple<LocalDate, Integer, LocalDate>> WORKDAY_TESTCASE = List.of(
             // 工作日开始
             ImmutableTriple.of(LocalDate.of(2024, 3, 22), 1, LocalDate.of(2024, 3, 25)),
@@ -88,4 +63,28 @@ public class WorkdayTests {
             ImmutableTriple.of(LocalDate.of(2024, 4, 20), 1, LocalDate.of(2024, 4, 26)),
             ImmutableTriple.of(LocalDate.of(2024, 4, 20), 7, LocalDate.of(2024, 5, 7))
     );
+
+    @BeforeAll
+    static void setup() {
+        calendar.addHolidays(DATA_HOLIDAYS);
+        calendar.addFlexibleWorkdays(DATA_FLEXIBLE_WORKDAYS);
+    }
+
+    @Test
+    void netWorkdaysTest() {
+        NETWORKDAY_TESTCASE.forEach(testCase -> {
+            var start = testCase.getLeft();
+            var end = testCase.getMiddle();
+            assertEquals(testCase.getRight(), calendar.netWorkdays(start, end));
+        });
+    }
+
+    @Test
+    void workdayTest() {
+        WORKDAY_TESTCASE.forEach(testCase -> {
+            var start = testCase.getLeft();
+            var duration = Duration.ofDays(testCase.getMiddle());
+            assertEquals(testCase.getRight(), calendar.workday(start, duration));
+        });
+    }
 }

@@ -1,15 +1,18 @@
 package cc.ddrpa.fixa;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import cc.ddrpa.fixa.loader.ICSDateLoader;
 
-import cc.ddrpa.fixa.loader.AppleCalendarDateLoader;
-import java.io.IOException;
-import java.time.LocalDate;
-import java.util.List;
+import java.net.URI;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.time.LocalDate;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
 /**
@@ -22,26 +25,28 @@ class ICSAutoUpdateTests {
     private static final Logger logger = LoggerFactory.getLogger(ICSAutoUpdateTests.class);
 
     private static final FixaCalendar calendar = new FixaCalendarBuilder()
-        .registerDateLoader(new AppleCalendarDateLoader())
-        .build();
+            .registerDateLoader(new ICSDateLoader(
+                    URI.create("https://calendars.icloud.com/holidays/cn_zh.ics/"),
+                    "holiday-calendar.ics"))
+            .build();
 
     private static final List<LocalDate> DATA_HOLIDAYS = List.of(
-        LocalDate.of(2024, 1, 1),
-        LocalDate.of(2024, 2, 10),
-        LocalDate.of(2024, 2, 11),
-        LocalDate.of(2024, 2, 12),
-        LocalDate.of(2024, 2, 13),
-        LocalDate.of(2024, 9, 15),
-        LocalDate.of(2024, 9, 16),
-        LocalDate.of(2024, 9, 17),
-        LocalDate.of(2024, 10, 3));
+            LocalDate.of(2024, 1, 1),
+            LocalDate.of(2024, 2, 10),
+            LocalDate.of(2024, 2, 11),
+            LocalDate.of(2024, 2, 12),
+            LocalDate.of(2024, 2, 13),
+            LocalDate.of(2024, 9, 15),
+            LocalDate.of(2024, 9, 16),
+            LocalDate.of(2024, 9, 17),
+            LocalDate.of(2024, 10, 3));
 
     private static final List<LocalDate> DATA_FLEXIBLE_WORKDAYS = List.of(
-        LocalDate.of(2024, 2, 4),
-        LocalDate.of(2024, 2, 18),
-        LocalDate.of(2024, 4, 7),
-        LocalDate.of(2024, 9, 14),
-        LocalDate.of(2024, 10, 12));
+            LocalDate.of(2024, 2, 4),
+            LocalDate.of(2024, 2, 18),
+            LocalDate.of(2024, 4, 7),
+            LocalDate.of(2024, 9, 14),
+            LocalDate.of(2024, 10, 12));
 
     @Test
     void parseTest() throws IOException {

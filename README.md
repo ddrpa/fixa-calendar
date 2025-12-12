@@ -1,118 +1,287 @@
-# FixaCalendar - 基于 RoaringBitmap 的工作日/休息日数据结构与计算实现
+# FixaCalendar
 
-## 介绍
+基于 RoaringBitmap 的工作日计算库，提供工作日/休息日判定、区间工作日统计、工作日推算等功能。
 
-在 FixaCalendar 中，节假日被处理为时间线上的点，程序通过查询时间线上起始日期和终止日期之间的点的数量来计算两个日期之间的节假日数量，从而进行工作日相关的推导。
+## 设计思路
 
-那么，为什么不直接用一个列表存储节假日，然后遍历计算节假日数量呢？
+FixaCalendar 将日期映射为时间线上的整数点（epoch day），使用位图数据结构存储非工作日集合。计算两个日期之间的工作日数量时，只需查询区间内的非工作日基数（cardinality），无需遍历。
 
-作者没有也没打算做性能分析，
-因为不管性能是更好了还是更坏了，在大多数使用场景下这点都不够看的。内存消耗也不是什么大的问题，假日办只会在每年 11 月 25 日左右发布明年的假期安排，对于一般应用，原本就不需要把多少数据放在内存里。
+核心数据结构：
 
-作者只是演示下 Bitmap 能拿来这么用而已，你要抠性能可以换成有序数组。
+- **weekendMap**: 存储周末日期
+- **holidayMap**: 存储法定节假日
+- **flexibleWorkdayMap**: 存储调休产生的工作日
+- **dayOffMap**: 实际非工作日集合，计算公式为 `weekend + holiday - flexibleWorkday`
 
-Fixa 是作者用 JetBrains IDEA 随机项目生成器插件使用瑞典家具风格随机生成的项目名字。
+选用 RoaringBitmap 是因为其在稀疏位图场景下具有良好的压缩率和查询性能。对于日历数据这类分布相对稀疏的场景，RoaringBitmap 的 `rangeCardinality` 操作可在常数时间内完成区间统计。
 
-## 定义
+## 术语定义
 
-FixaCalendar 主要用于计算非工作日（DayOff）和工作日（Workday），但 `isXXX` 方法还支持额外的定义：
+| 术语 | 说明 |
+|------|------|
+| Weekend | 周末，由 `FixaWeekendEnum` 在初始化时定义，不可动态修改 |
+| Holiday | 法定节假日，可通过 `addHoliday` 系列方法添加 |
+| FlexibleWorkday | 调休工作日，即原本是周末但需要上班的日期 |
+| DayOff | 非工作日，包括未被调休覆盖的周末和节假日 |
+| Workday | 工作日，即非 DayOff 的日期 |
 
-- `isWeekend`: 是否是周末（与是否为工作日无关）
-- `isHoliday`: 是否是节假日（可能同时是周末）
-- `isFlexibleWorkday`: 是否是调休产生的工作日（也可能同时是周末）
+`isXXX` 方法返回的是日期的属性标记，而非互斥状态。例如，某个周六被标记为调休工作日后：
 
-周末（`Weekend`）是固定的，由 FixaWeekendEnum 枚举类型的变量在初始化时定义。
+- `isWeekend()` 返回 `true`（仍是周六）
+- `isFlexibleWorkday()` 返回 `true`
+- `isDayOff()` 返回 `false`
+- `isWorkday()` 返回 `true`
 
-节假日（`Holiday`）和调休工作日（`FlexibleWorkday`）可以由方法动态添加，但是需要注意添加的顺序，因为节假日和调休工作日的优先级是一样的。
+### 添加顺序的影响
 
-例如先调用 `addHolidays(LocalDate.of(2024,4,1))` 添加了 2024-04-01 为节日，再使用 `addFlexibleWorkday` 将其设置为调休产生的工作日，则对该日期的 `isHoliday` 和 `isFlexibleWorkday` 以及 `isWorkday` 都将返回 `True`，而 `isDayOff` 返回 `False`。
+节假日和调休工作日的添加顺序会影响最终的 `dayOffMap` 状态：
 
-如果先调用 `addFlexibleWorkday` 再调用 `addHolidays`，则 `isWorkday` 返回 `False`，`isDayOff` 返回 `True`。
+```java
+// 先添加节假日，再标记为调休工作日
+calendar.addHoliday(LocalDate.of(2024, 4, 1));
+calendar.addFlexibleWorkday(LocalDate.of(2024, 4, 1));
+// 结果：isDayOff() = false, isWorkday() = true
 
-## 使用方法
+// 先标记调休工作日，再添加节假日
+calendar.addFlexibleWorkday(LocalDate.of(2024, 4, 1));
+calendar.addHoliday(LocalDate.of(2024, 4, 1));
+// 结果：isDayOff() = true, isWorkday() = false
+```
 
-你可以通过 Maven 中央仓库获取 FixaCalendar，最新版本可通过 [Sonatype Maven Central Repository](https://central.sonatype.com/artifact/cc.ddrpa.fixa/fixa) 查询，目前发布的版本为 `1.0.1`。
+## 安装
+
+通过 Maven 中央仓库获取，当前稳定版本为 `1.0.2`：
 
 ```xml
 <dependency>
     <groupId>cc.ddrpa.fixa</groupId>
     <artifactId>fixa</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
 </dependency>
 ```
 
-你需要使用 JDK11+ 来运行 Fixa，JDK8 的支持不在考虑范围内。如果你仍在使用 JDK8，应该至少试试看 JDK11。
+最新版本可在 [Maven Central](https://central.sonatype.com/artifact/cc.ddrpa.fixa/fixa) 查询。
 
-使用 FixaCalendarBuilder 构造一个 FixaCalendar 实例，并设置 Apple 日历为更新数据源，其他参数保持默认：
+**系统要求**: JDK 11+
+
+## 快速开始
+
+### 创建日历实例
+
+使用 `FixaCalendarBuilder` 构建日历实例：
 
 ```java
 FixaCalendar calendar = new FixaCalendarBuilder()
-    .registerDateLoader(new AppleCalendarDateLoader())
+    .setWeekendType(FixaWeekendEnum.SATURDAY_AND_SUNDAY)
+    .startWeekendCalcAfter(LocalDate.of(2024, 1, 1))
+    .setWeekendCalcDuration(Duration.ofDays(365 * 3))
+    .registerDateLoader(new ICSDateLoader(
+        URI.create("https://example.com/holidays.ics"),
+        "holiday-calendar.ics"))
     .build();
 ```
 
-手动添加一些额外的日期和工作日：
+Builder 方法说明：
+
+| 方法 | 默认值 | 说明 |
+|------|--------|------|
+| `setWeekendType` | `SATURDAY_AND_SUNDAY` | 周末类型，支持单休和双休的多种组合 |
+| `startWeekendCalcAfter` | `LocalDate.now()` | 周末计算的起始日期 |
+| `setWeekendCalcDuration` | 5 年 | 预计算周末的时间跨度 |
+| `registerDateLoader` | `NopeDateLoader` | 节假日数据加载器 |
+
+### 手动添加节假日和调休
 
 ```java
+// 添加单个节假日
+calendar.addHoliday(LocalDate.of(2024, 10, 1));
+
+// 添加连续节假日
+calendar.addHolidays(LocalDate.of(2024, 10, 1), LocalDate.of(2024, 10, 7));
+
+// 添加节假日列表
 calendar.addHolidays(List.of(
-        LocalDate.of(2024, 4, 4),
-        LocalDate.of(2024, 4, 5),
-        LocalDate.of(2024, 4, 6),
+    LocalDate.of(2024, 1, 1),
+    LocalDate.of(2024, 2, 10)
 ));
-calendar.addFlexibleWorkday(LocalDate.of(2024, 4, 7));
+
+// 添加调休工作日
+calendar.addFlexibleWorkday(LocalDate.of(2024, 10, 12));
 ```
 
-### 计算两个日期之间的工作日
+## API 参考
 
-行为和 Microsoft Excel 的 `NETWORKDAYS(start_date, end_date)` 函数类似。
+### 日期判定
 
 ```java
-int workdays = calendar.netWorkdays(start, end);
+boolean isWorkday(LocalDate date)      // 是否为工作日
+boolean isDayOff(LocalDate date)       // 是否为非工作日
+boolean isWeekend(LocalDate date)      // 是否为周末
+boolean isHoliday(LocalDate date)      // 是否为节假日
+boolean isFlexibleWorkday(LocalDate date)  // 是否为调休工作日
 ```
 
-### 计算指定日期后第 N 个工作日的日期
+### 工作日统计
 
-行为和 Microsoft Excel 的 `WORKDAY(start_date, days)` 函数类似。
+计算两个日期之间的工作日数量（含首尾），行为与 Excel `NETWORKDAYS` 函数一致：
 
 ```java
-LocalDate date = calendar.workday(startDate, duration);
+int workdays = calendar.netWorkdays(
+    LocalDate.of(2024, 4, 1),
+    LocalDate.of(2024, 4, 30)
+);
 ```
 
-### 计算指定日期前 N 个工作日的日期（1.0.2-SNAPSHOT）
+### 工作日推算
 
-常用于需要在指定截止期限前 N 日创建提醒任务的场景。
+计算指定日期后第 N 个工作日，行为与 Excel `WORKDAY` 函数一致：
 
 ```java
-LocalDate reverseWorkday(LocalDate endDate, Duration duration, boolean endDateMustBeWorkday);
+LocalDate date = calendar.workday(
+    LocalDate.of(2024, 4, 1),
+    Duration.ofDays(10)
+);
 ```
 
-`endDateMustBeWorkday` 为 true 时，如果 `endDate` 不是工作日，则会向前推移到最近的工作日再开始计算。
-
-### 列出指定日期区间内的所有非工作日
+计算指定日期前第 N 个工作日：
 
 ```java
+LocalDate date = calendar.reverseWorkday(
+    LocalDate.of(2024, 4, 30),  // 截止日期
+    Duration.ofDays(5),          // 向前推算 5 个工作日
+    true                         // 若截止日期非工作日，先向前推至最近工作日
+);
+```
+
+### 非工作日查询
+
+```java
+// 列出区间内所有非工作日
 List<LocalDate> dayOffs = calendar.dayOffs(startDate, endDate);
-```
 
-### 获取给定日期的下一个非工作日
-
-```java
+// 获取下一个非工作日（不含当日）
 LocalDate nextDayOff = calendar.nextDayOff(startDate);
 ```
 
-## 如何更新节假日数据
+## 节假日数据更新
 
-如果你注册了一个有效的 `DateLoader`，那么你可以通过调用 `cc.ddrpa.fixa.FixaCalendar.update(year)` 方法来更新指定年份的节假日数据。
+FixaCalendar 通过 `IFixaDateLoader` 接口支持从外部数据源加载节假日信息。
 
-互联网上有许多这样的节假日数据源，本项目集成了通过 iCalendar 订阅更新节假日信息的 `cc.ddrpa.fixa.loader.AppleCalendarDateLoader`；在单元测试 `cc.ddrpa.fixa.NateScarletAutoUpdateTests` 中也展示了基于 [NateScarlet/holiday-cn - GitHub](https://github.com/NateScarlet/holiday-cn") 的方案。你也可以编写自己的 `cc.ddrpa.fixa.loader.IFixaDateLoader` 实现。
+### 内置加载器
 
-### 通过 iCalendar 订阅更新
+**ICSDateLoader**
 
-iCalendar（通常使用 `.ics` 扩展名）是一种基于文本的日历信息交换和管理格式。该规范最初由 IETF 制定，标准化为 RFC 5545。它广泛用于各种应用程序和服务，如 Google Calendar、Microsoft Outlook、Apple Calendar。
+从 ICS 格式的日历文件加载节假日数据：
 
-### NateScarlet/holiday-cn - GitHub
+```java
+// 指定日历 URL 和本地缓存文件名
+new ICSDateLoader(
+    URI.create("https://example.com/holidays.ics"),
+    "holiday-calendar.ics")
 
-代码见 `cc.ddrpa.fixa.NateScarletAutoUpdateTests`。
+// 自定义缓存策略：缓存有效期 300 天，12 月和 1 月有效期 2 天
+new ICSDateLoader(
+    URI.create("https://example.com/holidays.ics"),
+    "holiday-calendar.ics",
+    300,  // 缓存有效期（天数）
+    2)    // 12 月和 1 月的缓存有效期（天数）
+```
 
-[NateScarlet/holiday-cn - GitHub](https://github.com/NateScarlet/holiday-cn") 使用网页爬虫抓取假日办的网站页面，并将解析出的节假日信息以 JSON 格式发布在 GitHub Repository 上，可以通过 JSDelivr CDN 获取按年份分割的 JSON 数据。
+该加载器会将 `.ics` 文件缓存至本地，并根据以下策略判断是否过期：
 
+- 12 月和 1 月：缓存有效期 2 天（默认）
+- 其他月份：缓存有效期 300 天（默认）
+
+### 手动更新
+
+```java
+calendar.update(2025);  // 更新 2025 年的节假日数据
+```
+
+### 自定义加载器
+
+实现 `IFixaDateLoader` 接口：
+
+```java
+public interface IFixaDateLoader {
+    boolean load(FixaCalendar calendarInstance);
+    boolean update(int year, FixaCalendar calendarInstance);
+    boolean isOutdated();
+}
+```
+
+示例：使用 [NateScarlet/holiday-cn](https://github.com/NateScarlet/holiday-cn) 数据源：
+
+```java
+String url = String.format(
+    "https://fastly.jsdelivr.net/gh/NateScarlet/holiday-cn@master/%d.json",
+    year
+);
+HttpResponse<String> response = HttpClient.newHttpClient()
+    .send(HttpRequest.newBuilder().uri(URI.create(url)).GET().build(),
+          HttpResponse.BodyHandlers.ofString());
+
+JsonArray days = JsonParser.parseString(response.body())
+    .getAsJsonObject()
+    .getAsJsonArray("days");
+
+for (JsonElement day : days) {
+    JsonObject obj = day.getAsJsonObject();
+    LocalDate date = LocalDate.parse(obj.get("date").getAsString());
+    if (obj.get("isOffDay").getAsBoolean()) {
+        calendar.addHoliday(date);
+    } else {
+        calendar.addFlexibleWorkday(date);
+    }
+}
+```
+
+完整实现参见 `cc.ddrpa.fixa.NateScarletAutoUpdateTests`。
+
+## 周末类型
+
+`FixaWeekendEnum` 支持以下周末定义：
+
+**双休**
+
+| 枚举值 | 说明 |
+|--------|------|
+| `SATURDAY_AND_SUNDAY` | 周六、周日 |
+| `SUNDAY_AND_MONDAY` | 周日、周一 |
+| `FRIDAY_AND_SATURDAY` | 周五、周六 |
+| ... | 其他连续两天组合 |
+
+**单休**
+
+| 枚举值 | 说明 |
+|--------|------|
+| `SUNDAY_ONLY` | 仅周日 |
+| `SATURDAY_ONLY` | 仅周六 |
+| ... | 其他单日 |
+
+## 技术细节
+
+### 日期存储
+
+日期使用 `LocalDate.toEpochDay()` 转换为整数存储。epoch day 是从 1970-01-01 开始计算的天数，可表示的日期范围覆盖公元前后数百万年。
+
+### RoaringBitmap 操作
+
+主要使用的 RoaringBitmap 方法：
+
+- `contains(int)`: O(1) 判断日期是否在集合中
+- `rangeCardinality(long, long)`: O(1) 统计区间内元素数量
+- `add(int[])`: 批量添加日期
+- `andNot(RoaringBitmap)`: 集合差运算，用于从 dayOffMap 中移除调休工作日
+
+### 线程安全
+
+`FixaCalendar` 实例不是线程安全的。如需在多线程环境使用，建议：
+
+- 在应用启动时完成所有节假日配置
+- 运行时仅调用只读方法（`isXXX`、`netWorkdays` 等）
+- 或使用外部同步机制
+
+## 许可证
+
+Apache License 2.0

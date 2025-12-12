@@ -36,15 +36,15 @@ public enum FixaWeekendEnum {
         this.code = code;
     }
 
-    public int getCode() {
-        return code;
-    }
-
     public static FixaWeekendEnum of(int code) {
         return Stream.of(FixaWeekendEnum.values())
                 .filter(p -> p.getCode() == code)
                 .findFirst()
                 .orElse(SATURDAY_AND_SUNDAY);
+    }
+
+    public int getCode() {
+        return code;
     }
 
     public boolean isSingleDayWeekend() {

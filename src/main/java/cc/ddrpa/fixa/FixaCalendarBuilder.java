@@ -2,6 +2,7 @@ package cc.ddrpa.fixa;
 
 import cc.ddrpa.fixa.loader.IFixaDateLoader;
 import cc.ddrpa.fixa.loader.NopeDateLoader;
+
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.Objects;
@@ -54,16 +55,16 @@ public class FixaCalendarBuilder {
         if (weekend.isSingleDayWeekend()) {
             startPos = startPos - dayOfWeek - 4 + weekend.getCode();
             weekendPos = IntStream.iterate(startPos, i -> i + 7)
-                .limit(durationInDays / 7)
-                .toArray();
+                    .limit(durationInDays / 7)
+                    .toArray();
         } else if (weekend.isDoubleDayWeekend()) {
             startPos = startPos - dayOfWeek - 2 + weekend.getCode();
             weekendPos = IntStream.iterate(startPos, i -> i + 7)
-                .limit(durationInDays / 7)
-                .flatMap(i -> IntStream.of(i, i + 1))
-                .toArray();
+                    .limit(durationInDays / 7)
+                    .flatMap(i -> IntStream.of(i, i + 1))
+                    .toArray();
         }
         return new FixaCalendar(weekendPos,
-            Objects.isNull(loader) ? new NopeDateLoader() : loader);
+                Objects.isNull(loader) ? new NopeDateLoader() : loader);
     }
 }

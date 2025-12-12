@@ -1,8 +1,6 @@
 package cc.ddrpa.fixa;
 
 import org.junit.jupiter.api.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.LocalDate;
@@ -11,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class ReverseWorkdayTests {
 
-    private static final FixaCalendar calendar = new FixaCalendarBuilder().build();
+    private static final FixaCalendar calendar = new FixaCalendarBuilder().startWeekendCalcAfter(LocalDate.of(2025, 1, 1)).setWeekendType(FixaWeekendEnum.SATURDAY_AND_SUNDAY).build();
 
     /**
      * 测试结束日期是工作日的情况

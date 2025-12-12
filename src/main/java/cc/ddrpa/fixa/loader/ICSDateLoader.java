@@ -1,18 +1,14 @@
 package cc.ddrpa.fixa.loader;
 
-import static java.time.temporal.ChronoUnit.SECONDS;
-
 import biweekly.Biweekly;
 import biweekly.component.VEvent;
 import cc.ddrpa.fixa.FixaCalendar;
 import cc.ddrpa.fixa.FixaCalendarException;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.*;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -28,36 +24,58 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-public class AppleCalendarDateLoader implements IFixaDateLoader {
+import static java.time.temporal.ChronoUnit.SECONDS;
 
-    private static final Logger logger = LoggerFactory.getLogger(AppleCalendarDateLoader.class);
+/**
+ * ICS 日历文件加载器，支持从 URL 或本地文件加载 ICS 格式的日历数据
+ */
+public class ICSDateLoader implements IFixaDateLoader {
+
+    private static final Logger logger = LoggerFactory.getLogger(ICSDateLoader.class);
 
     private static final int SECONDS_IN_DAY = 24 * 60 * 60;
-    private static final File file = new File("apple-calendar.ics");
 
     private final URI calendarURI;
+    private final File cacheFile;
+    private final int cacheValidDays;
+    private final int cacheValidDaysInDecJan;
 
-    public AppleCalendarDateLoader(URI calendarURI) {
+    /**
+     * 创建 ICS 日历加载器
+     *
+     * @param calendarURI          日历 ICS 文件的 URL
+     * @param cacheFileName        本地缓存文件名
+     * @param cacheValidDays       缓存有效期（天数）
+     * @param cacheValidDaysInDecJan 12 月和 1 月的缓存有效期（天数），通常设置较短以便及时获取新年节假日
+     */
+    public ICSDateLoader(URI calendarURI, String cacheFileName, int cacheValidDays, int cacheValidDaysInDecJan) {
         this.calendarURI = calendarURI;
+        this.cacheFile = new File(cacheFileName);
+        this.cacheValidDays = cacheValidDays;
+        this.cacheValidDaysInDecJan = cacheValidDaysInDecJan;
     }
 
-    public AppleCalendarDateLoader() {
-        this(URI.create("https://calendars.icloud.com/holidays/cn_zh.ics/"));
+    /**
+     * 创建 ICS 日历加载器，使用默认缓存策略
+     *
+     * @param calendarURI   日历 ICS 文件的 URL
+     * @param cacheFileName 本地缓存文件名
+     */
+    public ICSDateLoader(URI calendarURI, String cacheFileName) {
+        this(calendarURI, cacheFileName, 300, 2);
     }
 
     @Override
     public boolean load(FixaCalendar calendarInstance) {
-        if (!file.exists()) {
+        if (!cacheFile.exists()) {
             try {
                 downloadFile();
-            } catch (URISyntaxException | IOException | InterruptedException e) {
+            } catch (IOException | InterruptedException e) {
                 throw new FixaCalendarException("Failed to download ics file", e);
             }
         }
-        try (FileInputStream fis = new FileInputStream(file)) {
+        try (FileInputStream fis = new FileInputStream(cacheFile)) {
             // 不按日期过滤
             process((ts) -> false, (ts, te) -> false, calendarInstance, fis);
         } catch (IOException e) {
@@ -72,20 +90,20 @@ public class AppleCalendarDateLoader implements IFixaDateLoader {
         // 计算指定年度的 EpochSecond 上下限
         // 开始时间是指定年份的 1 月 1 日 0 时 0 分 0 秒
         long startEpoch = LocalDate.ofYearDay(year, 1)
-            .atStartOfDay(ZoneOffset.ofHours(8))
-            .toInstant()
-            .toEpochMilli() / 1000L;
+                .atStartOfDay(ZoneOffset.ofHours(8))
+                .toInstant()
+                .toEpochMilli() / 1000L;
         // 结束时间是指定年份的 12 月 31 日 23 时 59 分 59 秒
         long endEpoch = LocalDate.ofYearDay(year + 1, 1)
-            .atStartOfDay(ZoneOffset.ofHours(8))
-            .toInstant()
-            .toEpochMilli() / 1000L - 1L;
+                .atStartOfDay(ZoneOffset.ofHours(8))
+                .toInstant()
+                .toEpochMilli() / 1000L - 1L;
         // 过滤掉不在指定年度内的单日日历事件
         Function<Long, Boolean> singleDayEventFilter = (ts) -> ts < startEpoch || ts > endEpoch;
         // 过滤掉与指定年度无交集的多日日历事件
         BiFunction<Long, Long, Boolean> multiDayEventFilter = (ts, te) -> te < startEpoch
-            || ts > endEpoch;
-        try (FileInputStream fis = new FileInputStream(file)) {
+                || ts > endEpoch;
+        try (FileInputStream fis = new FileInputStream(cacheFile)) {
             process(singleDayEventFilter, multiDayEventFilter, calendarInstance, fis);
         } catch (IOException e) {
             throw new FixaCalendarException("Failed to read ics file", e);
@@ -95,28 +113,35 @@ public class AppleCalendarDateLoader implements IFixaDateLoader {
 
     @Override
     public boolean isOutdated() {
-        LocalDateTime lastUpdateTime = LocalDateTime.ofEpochSecond(file.lastModified(), 0,
-            ZoneOffset.ofHours(8));
-        LocalDateTime now = LocalDateTime.now();
-        // 如果当前是 12-1月，加速过期
-        if (now.getMonth().getValue() == 1 || now.getMonth().getValue() == 12) {
-            return now.minusDays(2L).isAfter(lastUpdateTime);
+        if (!cacheFile.exists()) {
+            return true;
         }
-        return now.minusDays(300L).isAfter(lastUpdateTime);
+        LocalDateTime lastUpdateTime = LocalDateTime.ofEpochSecond(cacheFile.lastModified() / 1000L, 0,
+                ZoneOffset.ofHours(8));
+        LocalDateTime now = LocalDateTime.now();
+        // 如果当前是 12 月或 1 月，使用较短的缓存有效期
+        if (now.getMonth().getValue() == 1 || now.getMonth().getValue() == 12) {
+            return now.minusDays(cacheValidDaysInDecJan).isAfter(lastUpdateTime);
+        }
+        return now.minusDays(cacheValidDays).isAfter(lastUpdateTime);
     }
 
     /**
      * 通过替换文件的方式更新日历数据，如果更新失败，则恢复旧文件，更新成功后删除旧文件
      */
     protected synchronized void updateFile() {
-        File backupFile = new File(file.getName() + ".bak");
+        File backupFile = new File(cacheFile.getName() + ".bak");
         // 将旧文件重命名
-        file.renameTo(backupFile);
+        if (cacheFile.exists()) {
+            cacheFile.renameTo(backupFile);
+        }
         try {
             downloadFile();
-        } catch (URISyntaxException | IOException | InterruptedException e) {
+        } catch (IOException | InterruptedException e) {
             // 恢复旧文件
-            backupFile.renameTo(file);
+            if (backupFile.exists()) {
+                backupFile.renameTo(cacheFile);
+            }
             throw new FixaCalendarException("Failed to download file", e);
         }
         backupFile.delete();
@@ -125,26 +150,25 @@ public class AppleCalendarDateLoader implements IFixaDateLoader {
     /**
      * 下载日历数据
      *
-     * @throws URISyntaxException
      * @throws IOException
      * @throws InterruptedException
      */
-    protected void downloadFile() throws URISyntaxException, IOException, InterruptedException {
+    protected void downloadFile() throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
-            .uri(calendarURI)
-            .GET()
-            .header("Accept", "text/calendar; charset=UTF-8")
-            .header("Accept-Language", "en-US,en;q=0.5")
-            .header("User-Agent",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:129.0) Gecko/20100101 Firefox/129.0")
-            .header("Accept-Encoding", "gzip, deflate")
-            .timeout(Duration.of(3, SECONDS))
-            .build();
+                .uri(calendarURI)
+                .GET()
+                .header("Accept", "text/calendar; charset=UTF-8")
+                .header("Accept-Language", "en-US,en;q=0.5")
+                .header("User-Agent",
+                        "Mozilla/5.0 (compatible; FixaCalendar/1.0)")
+                .header("Accept-Encoding", "gzip, deflate")
+                .timeout(Duration.of(10, SECONDS))
+                .build();
         HttpResponse<InputStream> response = HttpClient.newHttpClient()
-            .send(request, BodyHandlers.ofInputStream());
+                .send(request, BodyHandlers.ofInputStream());
         String encoding = response.headers().firstValue("Content-Encoding").orElse("");
-        try (FileOutputStream fos = new FileOutputStream(file);
-            InputStream is = response.body()) {
+        try (FileOutputStream fos = new FileOutputStream(cacheFile);
+             InputStream is = response.body()) {
             if ("gzip".equalsIgnoreCase(encoding)) {
                 try (GZIPInputStream gis = new GZIPInputStream(is)) {
                     fos.write(gis.readAllBytes());
@@ -165,17 +189,17 @@ public class AppleCalendarDateLoader implements IFixaDateLoader {
     /**
      * 将解析出的所有日历事件添加到日历实例
      *
-     * @param singleDayEventFilter
-     * @param multiDayEventFilter
-     * @param calendarInstance
-     * @param inputStream
+     * @param singleDayEventFilter 单日事件过滤器
+     * @param multiDayEventFilter  多日事件过滤器
+     * @param calendarInstance     日历实例
+     * @param inputStream          ICS 文件输入流
      * @throws IOException
      */
     protected void process(
-        Function<Long, Boolean> singleDayEventFilter,
-        BiFunction<Long, Long, Boolean> multiDayEventFilter,
-        FixaCalendar calendarInstance,
-        InputStream inputStream
+            Function<Long, Boolean> singleDayEventFilter,
+            BiFunction<Long, Long, Boolean> multiDayEventFilter,
+            FixaCalendar calendarInstance,
+            InputStream inputStream
     ) throws IOException {
         List<VEvent> eventList = Biweekly.parse(inputStream).first().getComponents(VEvent.class);
         // 以倒序遍历，这样更近的日期会先读取，因为更新动作一般只关注明年或今年的数据
@@ -200,7 +224,6 @@ public class AppleCalendarDateLoader implements IFixaDateLoader {
                 }
                 isSingleDayEvent = false;
             }
-            // FEAT_NEED 在更新指定年份时，如果读取到关注年度之前的日历事件，可以终止读取
             // 获取日历事件名称
             String summary = event.getSummary().getValue();
             boolean isHolidayEvent;
@@ -213,8 +236,8 @@ public class AppleCalendarDateLoader implements IFixaDateLoader {
                 continue;
             }
             LocalDate eventDataStart = LocalDateTime.ofEpochSecond(timeStart, 0,
-                    ZoneOffset.ofHours(8))
-                .toLocalDate();
+                            ZoneOffset.ofHours(8))
+                    .toLocalDate();
             if (isSingleDayEvent) {
                 if (isHolidayEvent) {
                     calendarInstance.addHoliday(eventDataStart);
@@ -223,7 +246,7 @@ public class AppleCalendarDateLoader implements IFixaDateLoader {
                 }
             } else {
                 LocalDate eventDataEnd = LocalDateTime.ofEpochSecond(timeEnd, 0,
-                    ZoneOffset.ofHours(8)).toLocalDate();
+                        ZoneOffset.ofHours(8)).toLocalDate();
                 if (isHolidayEvent) {
                     calendarInstance.addHolidays(eventDataStart, eventDataEnd);
                 } else {

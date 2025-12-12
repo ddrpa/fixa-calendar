@@ -1,11 +1,9 @@
 package cc.ddrpa.fixa;
 
-import static java.time.temporal.ChronoUnit.SECONDS;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import org.junit.jupiter.api.Test;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -16,7 +14,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
-import org.junit.jupiter.api.Test;
+
+import static java.time.temporal.ChronoUnit.SECONDS;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * You can use @Scheduled annotation in Spring Boot project to schedule tasks.
